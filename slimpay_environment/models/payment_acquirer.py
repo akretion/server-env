@@ -24,5 +24,6 @@ class PaymentAcquirer(models.Model):
         """Name of the global section in the configuration files
 
         Can be customized in your model
+        used only if we don't use encryption_data module
         """
         return 'slimpay_payment_acquirer'
