@@ -36,6 +36,10 @@ class ServerEnvMixin(models.AbstractModel):
         if not self._current_env_encrypted_key_exists():
             return super()._compute_server_env_from_default(field_name, options)
         encrypted_data_name = "{},{}".format(self._name, self.id)
+        for inherit_name, inherit_field in self._inherits.items():
+            if field_name in self.env[inherit_name]._fields.keys():
+                encrypted_data_name = "{},{}".format(self.env[inherit_name]._name, self[inherit_field].id)
+                break
         env = self.env.context.get("environment", None)
 
         vals = (
