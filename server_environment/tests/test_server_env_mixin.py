@@ -24,11 +24,6 @@ class TestServerEnvMixinFieldDescriptor(common.ServerEnvironmentCase):
         from odoo_test_helper import FakeModelLoader
 
         cls.loader = FakeModelLoader(cls.env, cls.__module__)
-        cls.loader.backup_registry()
-        # The descriptor of "city" is defined once in Python on the base
-        # "res.partner" class, thus the same object is shared between all
-        # the registries of the process.
-        cls.shared_city_field = cls.env["res.partner"]._fields["city"]
         cls._origin_fields = {}
         for model in ("res.partner", "res.users"):
             cls._origin_fields[model] = set(dir(cls.env[model].__class__))
@@ -50,21 +45,34 @@ class TestServerEnvMixinFieldDescriptor(common.ServerEnvironmentCase):
         super().setUp()
         from .fake_models import FakePartner
 
+        # Backup the registry for each test (and not only once in
+        # setUpClass): restore_registry() assigns the backup copy as the
+        # live "_fields" of the models, which is then cleared and
+        # repopulated in place by _setup_base() on the next
+        # update_registry() call. A single backup would therefore be
+        # destroyed after the first update/restore cycle.
+        self.loader.backup_registry()
         self.loader.update_registry((FakePartner,))
         self.addCleanup(self.loader.restore_registry)
         self.addCleanup(self.remove_mixin_fields)
 
     def test_field_descriptor_not_mutated_in_place(self):
         """The mixin must install a new descriptor on the model."""
+        # The descriptor of "city" is defined once in Python on the base
+        # "res.partner" class: the very same object is shared between all
+        # the registries of the process.
+        from odoo.addons.base.models import res_partner
+
+        shared_field = res_partner.Partner.city
         env_field = self.env["res.partner"]._fields["city"]
-        self.assertIsNot(env_field, self.shared_city_field)
+        self.assertIsNot(env_field, shared_field)
         self.assertEqual(env_field.compute, "_compute_server_env")
         self.assertFalse(env_field.store)
         # the original descriptor must be left untouched, as it is shared
         # with the other registries of the process
-        self.assertFalse(self.shared_city_field.compute)
-        self.assertTrue(self.shared_city_field.store)
-        self.assertTrue(self.shared_city_field.copy)
+        self.assertFalse(shared_field.compute)
+        self.assertTrue(shared_field.store)
+        self.assertTrue(shared_field.copy)
 
     def test_res_users_create_with_mixin(self):
         """Creating a res.users must work when the mixin is applied.
@@ -90,7 +98,9 @@ class TestServerEnvMixinFieldDescriptor(common.ServerEnvironmentCase):
         partner = self.env["res.partner"].create({"name": "Contact"})
         partner.write({"city": "Env City"})
         self.assertEqual(partner.city, "Env City")
-        # unload the mixin, as done for any other registry not using it
+        # flush pending writes while the mixin fields are still in place,
+        # then unload the mixin, as done for any other registry not using it
+        self.env.flush_all()
         self.loader.restore_registry()
         # the field is a plain stored field again
         city_field = self.env["res.partner"]._fields["city"]
