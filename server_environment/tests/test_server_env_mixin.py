@@ -108,9 +108,10 @@ class TestServerEnvMixinFieldDescriptor(common.ServerEnvironmentCase):
         self.assertFalse(city_field.compute)
         # and the companion fields of the mixin are gone as well
         self.assertNotIn("x_city_env_default", self.env["res.partner"]._fields)
-        # ... and records can be created and read without any error
+        # ... and records can be created and read without any error:
+        # creating a partner reads its address fields (including the
+        # env-managed "city") in _handle_first_contact_creation(), the
+        # exact path that crashed in issue #301 (it is also triggered
+        # when creating a res.users, which creates such a partner)
         partner = self.env["res.partner"].create({"name": "Other Contact"})
         self.assertEqual(partner.city, False)
-        # creating a res.users also creates a partner whose address fields
-        # (including the env-managed "city") are read upon creation
-        self.env["res.users"].create({"name": "Bob", "login": "bob@example.com"})
