@@ -12,7 +12,6 @@ class TestPreserveNotEnvManagedData(common.ServerEnvironmentCase):
         from odoo_test_helper import FakeModelLoader
 
         cls.loader = FakeModelLoader(cls.env, cls.__module__)
-        cls.loader.backup_registry()
         cls._origin_fields = {}
         for model in ("res.partner", "res.users"):
             cls._origin_fields[model] = set(dir(cls.env[model].__class__))
@@ -32,6 +31,14 @@ class TestPreserveNotEnvManagedData(common.ServerEnvironmentCase):
         super().setUp()
         from .fake_models import FakePartner
 
+        # Backup the registry for each test (and not only once in
+        # setUpClass): restore_registry() sets the backup copy as the live
+        # "_fields" of the models, which is then cleared and repopulated
+        # in place by _setup_base() at the next update_registry() call. A
+        # single backup would be destroyed after the first update/restore
+        # cycle, leaving mixin-transformed field descriptors in place once
+        # the mixin has been removed from the registry.
+        self.loader.backup_registry()
         self.loader.update_registry((FakePartner,))
         self.addCleanup(self.loader.restore_registry)
         self.addCleanup(self.remove_mixin_fields)
