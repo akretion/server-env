@@ -15,33 +15,33 @@ class TestPreserveNotEnvManagedData(common.ServerEnvironmentCase):
         cls._origin_fields = {}
         for model in ("res.partner", "res.users"):
             cls._origin_fields[model] = set(dir(cls.env[model].__class__))
-        # Apply the mixin once for the whole class: the backup taken here is
-        # consumed only once, by the class cleanup below. (A class-level
-        # backup would NOT survive per-test update_registry() calls:
-        # restore_registry() sets the backup copy as the live "_fields" of
-        # the models, which is then cleared in place by _setup_base() at the
-        # next update_registry() call.)
-        cls.loader.backup_registry()
-        cls.addClassCleanup(cls.loader.restore_registry)
-        from .fake_models import FakePartner
 
-        cls.loader.update_registry((FakePartner,))
-        cls.addClassCleanup(cls.remove_mixin_fields)
-
-    @classmethod
-    def remove_mixin_fields(cls):
+    def remove_mixin_fields(self):
         """Clean up what FakeModelLoader.restore_registry() leaves behind.
 
         It skips "x_"-prefixed fields (e.g. x_city_env_default) and never
         touches non-field attributes (e.g. _inverse_server_env_city).
         """
         for model in ("res.partner", "res.users"):
-            extra = set(cls.env[model].__class__.__dict__) - cls._origin_fields[model]
+            extra = set(self.env[model].__class__.__dict__) - self._origin_fields[model]
             for attr in extra:
-                delattr(cls.env[model].__class__, attr)
+                delattr(self.env[model].__class__, attr)
 
     def setUp(self):
         super().setUp()
+        from .fake_models import FakePartner
+
+        # The mixin is applied and removed for each test (and not once in
+        # setUpClass): check_attrs() runs after each test and forbids model
+        # classes to keep unexpected attributes (city, server_env_defaults,
+        # _inverse_server_env_city), so they must be removed before it. The
+        # backup is also taken for each test: restore_registry() sets the
+        # backup copy as the live "_fields" of the models, which is then
+        # cleared in place by _setup_base() at the next update_registry().
+        self.loader.backup_registry()
+        self.loader.update_registry((FakePartner,))
+        self.addCleanup(self.loader.restore_registry)
+        self.addCleanup(self.remove_mixin_fields)
         # Deliberately not setting "city" here: writing it would already
         # populate x_city_env_default through the mixin's inverse method,
         # which would defeat the "no default yet" scenario below.
